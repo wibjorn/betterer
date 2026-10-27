@@ -1,0 +1,42 @@
+name: Simple-git compatibility
+on:
+  push:
+    branches: [ci/simple-git-compatibility]
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [16, 18]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --global yarn@1.22.22 --force
+      - name: Inspect published package requirements
+        run: |
+          npm view simple-git@4.0.2 version engines dependencies --json
+          npm view @simple-git/argv-parser@2.0.1 version engines dependencies --json
+      - run: yarn install --ignore-scripts --non-interactive
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yarn-lock-node-${{ matrix.node }}
+          path: yarn.lock
+      - name: Check resolved security floor
+        run: |
+          yarn why simple-git
+          yarn why @simple-git/argv-parser
+      - run: yarn patch-package
+      - run: yarn compile:packages
+      - name: Existing Git-backed cache and precommit tests
+        run: >-
+          node node_modules/jest-cli/bin/jest.js --runInBand --coverage=false
+          --runTestsByPath
+          test/cache.spec.ts test/cache-ci.spec.ts test/cache-deleted-file.spec.ts
+          test/cache-faster.spec.ts test/cache-path.spec.ts test/cache-worse.spec.ts
+          test/cli/precommit-add.spec.ts test/cli/precommit-specific-file.spec.ts
+          test/cli/precommit-worse.spec.ts
