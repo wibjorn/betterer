@@ -5,6 +5,36 @@ on:
 permissions:
   contents: read
 jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [12, 14, 16, 18]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install published simple-git
+        working-directory: ${{ runner.temp }}
+        run: npm install --prefix simple-git-smoke simple-git@4.0.2
+      - name: Exercise Git operations
+        working-directory: ${{ runner.temp }}/simple-git-smoke
+        run: |
+          node - <<'NODE'
+          const assert = require('assert');
+          const fs = require('fs');
+          const { simpleGit } = require('simple-git');
+          (async () => {
+            const git = simpleGit(process.cwd());
+            await git.init();
+            fs.writeFileSync('smoke.txt', 'ok');
+            await git.add('smoke.txt');
+            const status = await git.status();
+            assert(status.staged.includes('smoke.txt'));
+            assert((await git.raw(['ls-files', '--cached', '--others', '--exclude-standard'])).includes('smoke.txt'));
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
   compatibility:
     runs-on: ubuntu-latest
     strategy:
@@ -22,6 +52,7 @@ jobs:
           npm view simple-git@4.0.2 version engines dependencies --json
           npm view @simple-git/argv-parser@2.0.1 version engines dependencies --json
       - run: yarn install --ignore-scripts --non-interactive
+      - run: yarn tsc --version
       - uses: actions/upload-artifact@v4
         with:
           name: yarn-lock-node-${{ matrix.node }}
